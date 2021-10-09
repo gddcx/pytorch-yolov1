@@ -38,7 +38,10 @@ class VOCDataset(Dataset):
             img, bbox, category = self.crop(img, bbox, category)
             img, bbox = self.scale(img, bbox)
             img, bbox, category = self.translation(img, bbox, category)
-        
+        target = self.encoder(img, bbox, category)
+        if self.transform:
+            img = self.transform(img)
+        return img, target
 
     def hue(self, hsv_img):
         if random.random() > 0.8:
@@ -66,12 +69,12 @@ class VOCDataset(Dataset):
 
     def average_blur(self, img):
         if random.random()>0.8:
-            img = cv.blur(img, 3)
+            img = cv.blur(img, (3, 3))
         return img
 
     def horizontal_flip(self, img, bbox):
         if random.random() > 0.8:
-            img = cv.flip(img, 0)
+            img = cv.flip(img, 1)
             h, w, _ = img.shape
             temp = w - bbox[:, 0]
             bbox[:, 0] = w - bbox[:, 2]
@@ -84,33 +87,37 @@ class VOCDataset(Dataset):
             factor_vertical = random.uniform(0, 0.2)
             h, w, _ = img.shape
             start_horizontal = int(w * factor_horizontal)
-            end_horizontal = start_horizontal + int(0.8*w)
+            end_horizontal = start_horizontal + int(0.8 * w)
             start_vertical = int(h * factor_vertical)
-            end_vertical = start_vertical + int(0.8*w)
+            end_vertical = start_vertical + int(0.8 * h)
             img = img[start_vertical: end_vertical, start_horizontal:end_horizontal, :]
-            bbox[:, [0, 2]] = bbox[:, [0, 2]] - start_horizontal
-            bbox[:, [1, 3]] = bbox[:, [1, 3]] - start_vertical
             center_x = (bbox[:, 0] + bbox[:, 2]) / 2
             center_y = (bbox[:, 1] + bbox[:, 3]) / 2
-            inImage = (center_x > 0) & (center_y > 0)
+            inImage = (center_x > start_horizontal) & (center_x < end_horizontal) \
+                      & (center_y > start_vertical) & (center_y < end_vertical)
             bbox = bbox[inImage, :]
-            category = category[inImage, :]
+            bbox[:, [0, 2]] = bbox[:, [0, 2]] - start_horizontal
+            bbox[:, [1, 3]] = bbox[:, [1, 3]] - start_vertical
+            bbox[:, [0, 2]] = np.clip(bbox[:, [0, 2]], 0, int(0.8 * w))
+            bbox[:, [1, 3]] = np.clip(bbox[:, [1, 3]], 0, int(0.8 * h))
+            category = category[inImage]
         return img, bbox, category
 
     def scale(self, img, bbox):
         probility = random.random()
-        if  probility > 0.9:
-            factor = random.uniform(0.8, 1.2)
+        if  probility > 0.8:
+            factor = random.uniform(0.5, 1.5)
             h, w, _ = img.shape
             h = int(h * factor)
-            img = cv.resize(img, (h, w))
+            img = cv.resize(img, (w, h))  # size的顺序是w,h
             bbox[:, [1, 3]] = bbox[:, [1, 3]] * factor
-        elif probility < 0.1:
-            factor = random.uniform(0.8, 1.2)
+        elif probility < 0.2:
+            factor = random.uniform(0.5, 1.5)
             h, w, _ = img.shape
             w = int(w * factor)
-            img = cv.resize(img, (h, w))
+            img = cv.resize(img, (w, h))
             bbox[:, [0, 2]] = bbox[:, [0, 2]] * factor
+        bbox = bbox.astype(np.int)
         return img, bbox
 
     def translation(self, img, bbox, category):
@@ -121,24 +128,55 @@ class VOCDataset(Dataset):
             w_tran = int(w * factor_horizontal)
             h_tran = int(h * factor_vertical)
             canvas = np.zeros_like(img)
-            if w_tran < 0 and h_tran < 0: # 向右下移动
-                canvas[-h_tran:, -w_tran:, :] = img[:h+h_tran, :w+w_tran, :]
-            elif w_tran < 0 and h_tran >= 0: # 向右上移动
-                canvas[:h-h_tran, -w_tran:, :] = img[h_tran:, :w+w_tran, :]
-            elif w_tran >= 0 and h_tran < 0: # 向左下移动
-                canvas[-h_tran:, :w-w_tran, :] = img[:h+h_tran, w_tran:, :]
-            elif w_tran >= 0 and h_tran >= 0: #向左上移动
-                canvas[:h-h_tran, :w-w_tran, :] = img[h_tran:, w_tran:, :]
+            if w_tran < 0 and h_tran < 0:  # 向右下移动
+                canvas[-h_tran:, -w_tran:, :] = img[:h + h_tran, :w + w_tran, :]
+            elif w_tran < 0 and h_tran >= 0:  # 向右上移动
+                canvas[:h - h_tran, -w_tran:, :] = img[h_tran:, :w + w_tran, :]
+            elif w_tran >= 0 and h_tran < 0:  # 向左下移动
+                canvas[-h_tran:, :w - w_tran, :] = img[:h + h_tran, w_tran:, :]
+            elif w_tran >= 0 and h_tran >= 0:  # 向左上移动
+                canvas[:h - h_tran, :w - w_tran, :] = img[h_tran:, w_tran:, :]
             bbox[:, [0, 2]] = bbox[:, [0, 2]] - w_tran
             bbox[:, [1, 3]] = bbox[:, [1, 3]] - h_tran
             # 确保bbox中心点在图像内，因为中心点所在的格负责预测
-            center_x = (bbox[:, 0] + bbox[:, 2])/2 # shape: nbox
-            center_y = (bbox[:, 1] + bbox[:, 3])/2 # shape: nbox
+            center_x = (bbox[:, 0] + bbox[:, 2]) / 2  # shape: nbox
+            center_y = (bbox[:, 1] + bbox[:, 3]) / 2  # shape: nbox
             inImage = ((center_x > 0) & (center_x < w)) & ((center_y > 0) & (center_y < h))
             bbox = bbox[inImage, :]
-            category = category[inImage, :]
+            bbox[:, [0, 2]] = np.clip(bbox[:, [0, 2]], 0, w)  # 中心虽然还在图片内，但是边框可能会超过边界，要限制范围
+            bbox[:, [1, 3]] = np.clip(bbox[:, [1, 3]], 0, h)
+            category = category[inImage]
             return canvas, bbox, category
         return img, bbox, category
 
+    def encoder(self, img, bbox, category):
+        grid = 7
+        target = np.zeros((7, 7, 30), dtype=np.float32)
+        center_x = (bbox[:, 0] + bbox[:, 2]) / 2
+        center_y = (bbox[:, 1] + bbox[:, 3]) / 2
+        h, w, _ = img.shape
+        width_each_cell = w / grid
+        height_each_cell = h / grid
+        location_x = (center_x / width_each_cell).astype(np.int)
+        location_y = (center_y / height_each_cell).astype(np.int)
+        offset_x = center_x % width_each_cell
+        norm_offset_x = offset_x / width_each_cell
+        offset_y = center_y % height_each_cell
+        norm_offset_y = offset_y / height_each_cell
+        target[location_y, location_x, 0] = norm_offset_x
+        target[location_y, location_x, 1] = norm_offset_y
+        obj_width = bbox[:, 2] - bbox[:, 0]
+        obj_height = bbox[:, 3] - bbox[:, 1]
+        target[location_y, location_x, 2] = obj_width / w
+        target[location_y, location_x, 3] = obj_height / h
+        target[location_y, location_x, 4] = 1
+        target[location_y, location_x, 5:10] = target[location_y, location_x, :5]
+        one_hot = self.one_hot(category)
+        target[location_y, location_x, 10:] = one_hot
+        return target
 
-
+    def one_hot(self, label):
+        one_hot_array = np.zeros((len(label), 20))
+        row_index = np.array(list(range(len(label))))
+        one_hot_array[row_index, label] = 1
+        return one_hot_array
