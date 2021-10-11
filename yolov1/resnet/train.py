@@ -6,6 +6,7 @@ import glob
 import os
 import random
 import numpy as np
+import time
 
 import torch
 import torch.nn as nn
@@ -16,6 +17,23 @@ import xml.dom.minidom as xdm
 
 from .dataset import VOCDataset
 from .network import ResNet50Det
+from .loss import YOLOLoss
+
+from sacred import Experiment
+from sacred.observers import MongoObserver
+
+
+EXPERIMENT_NAME = "YOLO_ResNet50Det"
+ex = Experiment(EXPERIMENT_NAME)
+ex.observers.append(MongoObserver(url="11.11.11.100:11220", db_name="sacred"))
+
+def set_random_seeds(random_seed=0):
+    torch.manual_seed(random_seed)
+    torch.cuda.manual_seed_all(random_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(random_seed)
+    random.seed(random_seed)
 
 def load_data(data_path):
     voc2007_trainval_annotations = os.path.join(data_path, "VOC2007", "trainval", "Annotations", "*xml")
@@ -50,11 +68,16 @@ def load_data(data_path):
         res.append({"folder": folder, "filename": filename, "category": np.array(category_list), "bndbox": np.array(bndbox_list)})
     return res
 
-def main():
+@ex.automain
+def main(_run):
+    set_random_seeds(42)
     DATA_PATH = "../../dataset"
     BATCH_SIZE = 64
-    LEARNING_RATE=1e-3
-    EPOCH=135
+    LEARNING_RATE = 1e-3
+    EPOCH = 135
+    PRINT_INTERVEL = 50
+    SAVE_ROOT = os.path.join("models", EXPERIMENT_NAME, _run._id)
+    os.makedirs(SAVE_ROOT, exist_ok=True)
     #-----数据加载-----#
     res = load_data(DATA_PATH)
     split = int(len(res)*0.8)
@@ -72,15 +95,39 @@ def main():
     net = ResNet50Det(pretrain=True)
     net = nn.DataParallel(net)
     net = net.cuda()
-    #-----优化器-----#
-    Adam = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=0.0005)
+    #-----优化-----#
+    criterion = YOLOLoss()
+    optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=0.0005)
     #-----迭代训练/验证-----#
+    step = 0
+    best_loss = 1e6
     for epoch in range(EPOCH):
+        net.train()
         for iter, (img, target) in enumerate(train_loader):
             img = img.cuda()
-            target = target.cuda()
-            net(img)
-
-
-# if __name__ == '__main__':
-#     main()
+            target = target.cuda() # bs, 7, 7, 30
+            out = net(img) # bs, 30, 7, 7
+            loss = criterion(out, target)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            if iter % PRINT_INTERVEL == 0:
+                print("Time: {}, Epoch: [{}/{}], Iter: [{}/{}], Loss: {}"
+                      .format(time.strftime("%m-%d %H:%M:%S", time.localtime()), epoch, EPOCH, iter, len(train_loader), loss.item()))
+                _run.log_scalar("Train Loss", loss.item(), step=step)
+            step += 1
+        total_loss = 0
+        net.eval()
+        with torch.no_grad():
+            for iter, (img, target) in enumerate(eval_loader):
+                img = img.cuda()
+                target = target.cuda()
+                out = net(img)
+                loss = criterion(out, target)
+                total_loss += loss.item() * img.shape[0]
+        avg_loss = total_loss / len(eval_set)
+        print("Time: {}, Epoch: [{}/{}], Loss: {}".format(time.strftime("%m-%d %H:%M:%S", time.localtime()), epoch, EPOCH, avg_loss))
+        _run.log_scaler("Eval Loss", avg_loss, step=step)
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            torch.save(net.state_dict(), f"{SAVE_ROOT}/{EPOCH}_{step}.pth")
