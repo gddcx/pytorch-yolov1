@@ -6,6 +6,7 @@ import os
 import cv2 as cv
 import random
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 class VOCDataset(Dataset):
@@ -42,6 +43,7 @@ class VOCDataset(Dataset):
         img = cv.resize(img, (448, 448))
         if self.transform:
             img = self.transform(img)
+        target = torch.from_numpy(target)
         return img, target
 
     def hue(self, hsv_img):
