@@ -39,6 +39,7 @@ class VOCDataset(Dataset):
             img, bbox = self.scale(img, bbox)
             img, bbox, category = self.translation(img, bbox, category)
         target = self.encoder(img, bbox, category)
+        img = cv.resize(img, (448, 448))
         if self.transform:
             img = self.transform(img)
         return img, target
@@ -150,17 +151,22 @@ class VOCDataset(Dataset):
         return img, bbox, category
 
     def encoder(self, img, bbox, category):
+        h, w, _ = img.shape
+        w_scale_factor = 448 / w
+        h_scale_factor = 448 / h
+        bbox[:, [0, 2]] = bbox[:, [0, 2]] * w_scale_factor
+        bbox[:, [1, 3]] = bbox[:, [1, 3]] * h_scale_factor
+        h=w=448
         grid = 7
         target = np.zeros((7, 7, 30), dtype=np.float32)
         center_x = (bbox[:, 0] + bbox[:, 2]) / 2
         center_y = (bbox[:, 1] + bbox[:, 3]) / 2
-        h, w, _ = img.shape
         width_each_cell = w / grid
         height_each_cell = h / grid
         location_x = (center_x / width_each_cell).astype(np.int)
         location_y = (center_y / height_each_cell).astype(np.int)
         offset_x = center_x % width_each_cell
-        norm_offset_x = offset_x / width_each_cell
+        norm_offset_x = offset_x / width_each_cell #相对坐标归一化
         offset_y = center_y % height_each_cell
         norm_offset_y = offset_y / height_each_cell
         target[location_y, location_x, 0] = norm_offset_x
