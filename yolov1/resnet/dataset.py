@@ -39,6 +39,9 @@ class VOCDataset(Dataset):
             img, bbox, category = self.crop(img, bbox, category)
             img, bbox = self.scale(img, bbox)
             img, bbox, category = self.translation(img, bbox, category)
+        if len(bbox) == 0 or len(category) == 0:
+            # Caused by data enhancement, such as crop, translation and so on.
+            return [], []
         target = self.encoder(img, bbox, category)
         img = cv.resize(img, (448, 448))
         if self.transform:

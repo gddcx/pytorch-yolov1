@@ -5,23 +5,20 @@
 import glob
 import os
 import random
-import numpy as np
 import time
+import xml.dom.minidom as xdm
 
+import numpy as np
 import torch
 import torch.nn as nn
+from sacred import Experiment
+from sacred.observers import MongoObserver
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-import xml.dom.minidom as xdm
-
-from .dataset import VOCDataset
-from .network import ResNet50Det
-from .loss import YOLOLoss
-
-from sacred import Experiment
-from sacred.observers import MongoObserver
-
+from dataset import VOCDataset
+from loss import YOLOLoss
+from network import ResNet50Det
 
 EXPERIMENT_NAME = "YOLO_ResNet50Det"
 ex = Experiment(EXPERIMENT_NAME)
@@ -68,6 +65,17 @@ def load_data(data_path):
         res.append({"folder": folder, "filename": filename, "category": np.array(category_list), "bndbox": np.array(bndbox_list)})
     return res
 
+def collate_fn(batch):
+    # To handle the situation when __getitem__ in dataset.py return []
+    img_list = []
+    target_list = []
+    for img, target in batch:
+        if img == []:
+            continue
+        img_list.append(img)
+        target_list.append(target)
+    return torch.stack(img_list, dim=0), torch.stack(target_list, dim=0)
+
 @ex.automain
 def main(_run):
     set_random_seeds(42)
@@ -76,7 +84,7 @@ def main(_run):
     LEARNING_RATE = 1e-3
     EPOCH = 135
     PRINT_INTERVEL = 50
-    SAVE_ROOT = os.path.join("models", EXPERIMENT_NAME, _run._id)
+    SAVE_ROOT = os.path.join("models", EXPERIMENT_NAME, str(_run._id))
     os.makedirs(SAVE_ROOT, exist_ok=True)
     #-----数据加载-----#
     res = load_data(DATA_PATH)
@@ -88,15 +96,15 @@ def main(_run):
         transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
     ])
     train_set = VOCDataset(data=train_res, image_root=DATA_PATH, transform=transform, train=True)
-    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, num_workers=8, drop_last=True, shuffle=True)
+    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, num_workers=8, drop_last=True, shuffle=True, collate_fn=collate_fn)
     eval_set = VOCDataset(data=eval_res, image_root=DATA_PATH, transform=transform, train=False)
-    eval_loader = DataLoader(eval_set, batch_size=BATCH_SIZE, num_workers=8, drop_last=False, shuffle=False)
+    eval_loader = DataLoader(eval_set, batch_size=BATCH_SIZE, num_workers=8, drop_last=False, shuffle=False, collate_fn=collate_fn)
     #-----模型加载-----#
     net = ResNet50Det(pretrain=True)
     net = nn.DataParallel(net)
     net = net.cuda()
     #-----优化-----#
-    criterion = YOLOLoss()
+    criterion = YOLOLoss(lambda_coord=5, lambda_noobj=0.5)
     optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=0.0005)
     #-----迭代训练/验证-----#
     step = 0
@@ -127,7 +135,7 @@ def main(_run):
                 total_loss += loss.item() * img.shape[0]
         avg_loss = total_loss / len(eval_set)
         print("Time: {}, Epoch: [{}/{}], Loss: {}".format(time.strftime("%m-%d %H:%M:%S", time.localtime()), epoch, EPOCH, avg_loss))
-        _run.log_scaler("Eval Loss", avg_loss, step=step)
+        _run.log_scalar("Eval Loss", avg_loss, step=step)
         if avg_loss < best_loss:
             best_loss = avg_loss
             torch.save(net.state_dict(), f"{SAVE_ROOT}/{EPOCH}_{step}.pth")

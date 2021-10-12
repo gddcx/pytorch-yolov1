@@ -13,7 +13,7 @@ class YOLOLoss(nn.Module):
 
     def forward(self, input_, target):
         #TODO: to be optimized
-        input_ = input_.permute(0, 2, 3, 1) # bs, 7, 7, 30
+        input_ = input_.permute(0, 2, 3, 1).contiguous() # bs, 7, 7, 30
         mask, iou = self.selectBox(input_, target) # mask shape:bsx49, when false, select the first box, otherwise select the second box
         input_ = input_.reshape(-1, 30)
         # Select one box between the predicted two boxes.
@@ -49,10 +49,10 @@ class YOLOLoss(nn.Module):
         target_clone = target.clone() # bs, 7, 7, 30
         each_cell = 448 / 7
         # the top-left coordinate of grid cells on original images
-        horizontal_lt = torch.Tensor(list(range(7))).unsqueeze(-1).unsqueeze(0).unsqueeze(0) # 1, 1, 7, 1
+        horizontal_lt = torch.Tensor(list(range(7))).unsqueeze(-1).unsqueeze(0).unsqueeze(0).to(input_.device) # 1, 1, 7, 1
         horizontal_lt = horizontal_lt.repeat(input_.shape[0], 7, 1, 2) # bs, 7, 7, 2
         horizontal_lt = horizontal_lt * each_cell
-        vertical_lt = torch.Tensor(list(range(7))).unsqueeze(-1).unsqueeze(-1).unsqueeze(0) # 1, 7, 1, 1
+        vertical_lt = torch.Tensor(list(range(7))).unsqueeze(-1).unsqueeze(-1).unsqueeze(0).to(target.device) # 1, 7, 1, 1
         vertical_lt = vertical_lt.repeat(input_.shape[0], 1, 7, 2) # bs, 7, 7, 2
         vertical_lt = vertical_lt * each_cell
 
@@ -112,15 +112,3 @@ class YOLOLoss(nn.Module):
         iou[~m] = iou1[~m]
         iou[m] = iou2[m]
         return m, iou
-
-if __name__ == "__main__":
-    input_ = torch.rand(1, 30, 7, 7)
-    input_[:, 4, :, :] = 1
-
-    target = input_.clone()
-    target = target.permute(0, 2, 3, 1)
-    target[:, :, :, 4] = 1
-
-    criterion = YOLOLoss(lambda_coord=5, lambda_noobj=0.5)
-    loss = criterion(input_, target)
-    print(loss)
