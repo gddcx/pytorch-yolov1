@@ -33,9 +33,3 @@ class ResNet50Det(nn.Module):
         return x
 
 
-if __name__ == "__main__":
-    net = ResNet50Det(False).cuda()
-    data = torch.randn(10, 3, 448, 448).cuda()
-    out = net(data)
-    torch.mean(out).backward()
-
