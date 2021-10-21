@@ -37,7 +37,7 @@ class YOLOLoss(nn.Module):
         selected_target = selected_target[hasObj, :]  # nx25
         iou = iou[hasObj]
 
-        noobj_confidence_error = torch.sum((input_[~hasObj, [4, 9]])**2) # 没有物体的cell中所有confidence都要被惩罚
+        noobj_confidence_error = torch.sum((input_[~hasObj][:, [4, 9]])**2) # 没有物体的cell中所有confidence都要被惩罚
 
         coordinate_error = torch.sum((selected_input[:, 0] - selected_target[:, 0])**2 + (selected_input[:, 1] - selected_target[:, 1])**2)
         size_error = torch.sum((torch.sqrt(selected_input[:, 2]) - torch.sqrt(selected_target[:, 2]))**2 + (torch.sqrt(selected_input[:, 3]) - torch.sqrt(selected_target[:, 3]))**2)
