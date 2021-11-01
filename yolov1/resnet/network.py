@@ -47,11 +47,18 @@ class ResNet50Det(nn.Module):
         #     nn.BatchNorm2d(30),
         #     nn.Sigmoid()
         # )
+
+        # self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels=2048, out_channels=2048, kernel_size=3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(2048),
+            nn.ReLU()
+        )
         self.detect_block1 = BasicBlock(2048, 256)
         self.detect_block2 = BasicBlock(256, 256)
-        self.detect_block3 = BasicBlock(256, 256)
+        self.detect_block3 = BasicBlock(256, 30)
         self.downsample = nn.Sequential(
-            nn.Conv2d(in_channels=256, out_channels=30, kernel_size=3, padding=1, stride=2, bias=False),
+            nn.Conv2d(in_channels=30, out_channels=30, kernel_size=3, padding=1, stride=1, bias=False),
             nn.BatchNorm2d(30),
             nn.Sigmoid()
         )
@@ -66,7 +73,8 @@ class ResNet50Det(nn.Module):
     def forward(self, data):
         x = self.backbone(data)
         # x = self.detect_head(x)
-
+        # x = self.avgpool(x) # 1.59
+        x = self.conv(x) #20211031
         x = self.detect_block1(x)
         x = self.detect_block2(x)
         x = self.detect_block3(x)
