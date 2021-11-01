@@ -5,7 +5,9 @@
 #  |-val
 
 cd ../../dataset/ILSVRC2012
+mkdir train
 tar -xvf ILSVRC2012.img_train.tar -C train
+mkdir val
 tar -xvf ILSVRC2012.img_val.tar -C val
 
 cd train
@@ -14,5 +16,5 @@ do
   mkdir $name
   tar -xvf $name'.tar' -C $name
 done
-
-
+#删除中间tar包节省存储空间
+rm *.tar
