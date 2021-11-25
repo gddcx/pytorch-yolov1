@@ -105,7 +105,7 @@ def main(_run):
     for name, param in net.layer1.named_parameters():
         print(name, param)
     net = nn.DataParallel(net)
-    state_dict = torch.load("pretrain/models/YOLO_PretrainDarkNet/20211120/50_1020918.pth")
+    state_dict = torch.load("pretrain.pth")
     state_dict = {k: v for k, v in state_dict.items() if "fc" not in k}
     net.load_state_dict(state_dict, strict=False)
     for name, param in net.module.layer1.named_parameters():
