@@ -34,9 +34,10 @@ def set_random_seeds(random_seed=0):
 
 def load_data(data_path):
     voc2007_trainval_annotations = os.path.join(data_path, "VOC2007", "trainval", "Annotations", "*xml")
-    voc2007_test_annotations = os.path.join(data_path, "VOC2007", "test", "Annotations", "*xml")
+    # voc2007_test_annotations = os.path.join(data_path, "VOC2007", "test", "Annotations", "*xml")
     voc2012_trainval_annotations = os.path.join(data_path, "VOC2012", "trainval", "Annotations", "*xml")
-    annotation_path = glob.glob(voc2007_trainval_annotations) + glob.glob(voc2007_test_annotations) + glob.glob(voc2012_trainval_annotations)
+    # annotation_path = glob.glob(voc2007_trainval_annotations) + glob.glob(voc2007_test_annotations) + glob.glob(voc2012_trainval_annotations)
+    annotation_path = glob.glob(voc2007_trainval_annotations) + glob.glob(voc2012_trainval_annotations)
 
     all_category = ["aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
                      "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa",
@@ -82,8 +83,8 @@ def main(_run):
     DATA_PATH = "../../dataset"
     BATCH_SIZE = 64
     LEARNING_RATE = 1e-3
-    EPOCH = 135
-    PRINT_INTERVEL = 50
+    EPOCH = 1000
+    PRINT_INTERVAL = 50
     SAVE_ROOT = os.path.join("models", EXPERIMENT_NAME, str(_run._id))
     os.makedirs(SAVE_ROOT, exist_ok=True)
     #-----数据加载-----#
@@ -104,13 +105,20 @@ def main(_run):
     net = nn.DataParallel(net)
     net = net.cuda()
     #-----优化-----#
-    criterion = YOLOLoss(lambda_coord=5, lambda_noobj=0.5)
-    optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=0.0005)
+    criterion = YOLOLoss(lambda_coord=5, lambda_noobj=0.5, grid=7)
+    # optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.SGD(net.parameters(), lr=LEARNING_RATE, momentum=0.9, weight_decay=0.0005)
     #-----迭代训练/验证-----#
     step = 0
     best_loss = 1e6
     for epoch in range(EPOCH):
         net.train()
+        if epoch == 1:
+            optimizer.param_groups[0]['lr'] = 1e-2
+        if epoch == 75:
+            optimizer.param_groups[0]['lr'] = 1e-3
+        if epoch == 105:
+            optimizer.param_groups[0]['lr'] = 1e-4
         for iter, (img, target) in enumerate(train_loader):
             img = img.cuda()
             target = target.cuda() # bs, 7, 7, 30
@@ -119,9 +127,9 @@ def main(_run):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if iter % PRINT_INTERVEL == 0:
+            if iter % PRINT_INTERVAL == 0:
                 print("Time: {}, Epoch: [{}/{}], Iter: [{}/{}], Loss: {}"
-                      .format(time.strftime("%m-%d %H:%M:%S", time.localtime()), epoch, EPOCH, iter, len(train_loader), loss.item()))
+                      .format(time.strftime("%m-%d %H:%M:%S", time.localtime()), epoch, EPOCH, iter, len(train_loader), loss.item()), flush=True)
                 _run.log_scalar("Train Loss", loss.item(), step=step)
             step += 1
         total_loss = 0
@@ -134,8 +142,8 @@ def main(_run):
                 loss = criterion(out, target)
                 total_loss += loss.item() * img.shape[0]
         avg_loss = total_loss / len(eval_set)
-        print("Time: {}, Epoch: [{}/{}], Loss: {}".format(time.strftime("%m-%d %H:%M:%S", time.localtime()), epoch, EPOCH, avg_loss))
+        print("Time: {}, Epoch: [{}/{}], Loss: {}".format(time.strftime("%m-%d %H:%M:%S", time.localtime()), epoch, EPOCH, avg_loss), flush=True)
         _run.log_scalar("Eval Loss", avg_loss, step=step)
         if avg_loss < best_loss:
             best_loss = avg_loss
-            torch.save(net.state_dict(), f"{SAVE_ROOT}/{EPOCH}_{step}.pth")
+            torch.save(net.state_dict(), f"{SAVE_ROOT}/{epoch}_{step}.pth")

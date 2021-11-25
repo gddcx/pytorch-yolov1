@@ -17,7 +17,7 @@ all_category = ["aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", 
                      "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa",
                      "train", "tvmonitor"]
 
-
+import matplotlib.pyplot as plt
 def calculate_map(prediction, target, thres=0.5):
     ap_list = []
     for category in all_category:
@@ -30,10 +30,12 @@ def calculate_map(prediction, target, thres=0.5):
                 M += len(target[(k1, k2)])
         P = np.zeros((N, 2))  # 第一列记录confidence， 第二列记录TP:1, FP:0
         Q = np.zeros((N, 2))  # 第一列存储Recall， 第二列存储 Precision
+        not_in = 0
         for n, pred in enumerate(all_pred):
             filename = pred[0]
             confidence = pred[1]
             if (category, filename) not in target:
+                not_in = not_in + 1
                 continue
             GTBOX = target[(category, filename)]
             for gt_box in GTBOX:
@@ -61,10 +63,13 @@ def calculate_map(prediction, target, thres=0.5):
         # VOC 2007 with 11 points average
         ap = 0
         for x in np.arange(0.0, 1.1, 0.1):
-            if np.sum(Q[:, 0] >= x) == 0: # if the maximal value of recall less than the point x, it's used to advoid throw error from np.max()
-                continue
+            if np.sum(Q[:, 0] >= x) == 0:
+                break
             ap += np.max(Q[:, 1][Q[:, 0] >= x])
         ap /= 11
+        plt.plot(Q[:, 0], Q[:, 1], "*")
+        plt.show()
+        cv.waitKey()
         ap_list.append(ap)
     return ap_list
 #
@@ -132,7 +137,7 @@ def post_process(out):
     res[2, :, :] = xmax
     res[3, :, :] = ymax
     res[4, :, :] = filtered_out[4, :, :] * np.max(filtered_out[5:, :, :], axis=0)
-    res[5:, :, :] = np.argmax(filtered_out[5:, :, :], axis=0)
+    res[5, :, :] = np.argmax(filtered_out[5:, :, :], axis=0)
     res = res.reshape(6, -1)
     return res
 
@@ -163,7 +168,8 @@ if __name__ == "__main__":
     # DATA_PATH="../../dataset/VOC2007/test/"
     DATA_PATH="D:\\dataset\\VOC2007\\test"
     # DATA_PATH="D:\\dataset\\VOC2012\\test"
-    MODEL_PATH = "models/YOLO_ResNet50Det/288/271_75072.pth"
+    # MODEL_PATH = "models/YOLO_ResNet50Det/294/90_25116.pth"
+    MODEL_PATH = "models/YOLO_ResNet50Det/296/113_31464.pth"
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
@@ -187,7 +193,7 @@ if __name__ == "__main__":
             img1 = transform(img1).unsqueeze(0).cuda()
             out = net(img1).squeeze(0)  #30, 7, 7
             out = out.cpu().numpy()
-            out = post_process(out)  # 6, 7, 7
+            out = post_process(out)  # 6, 49
             out = nms(out, iou_thres=0.5, confidence_thres=0.1)
             h_factor = h / 448
             w_factor = w / 448
@@ -199,18 +205,20 @@ if __name__ == "__main__":
             #     ymin = int(out[1, j])
             #     xmax = int(out[2, j])
             #     ymax = int(out[3, j])
-                # cv.rectangle(img, (xmin, ymin), (xmax, ymax), (0, 255, 0), 1, 1)
+            #     cv.rectangle(img, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
+            #     _, baseline = cv.getTextSize(str(out[4, j]), cv.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+            #     cv.putText(img, str(out[4, j]), (xmin, ymin-baseline), cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1, 8)
             for j, category_idx in enumerate(out[5, :]):
                 # 画出gt的框框
                 # for [xmin, ymin, xmax, ymax] in target[(all_category[int(category_idx)], filename)]:
-                #     cv.rectangle(img, (xmin, ymin), (xmax, ymax), (255, 255, 255), 1, 1)
+                #     cv.rectangle(img, (xmin, ymin), (xmax, ymax), (255, 255, 255), 2, 1)
+                    # print((all_category[int(category_idx)]))
                 category = all_category[int(category_idx)]
                 prediction[category].\
                     append([filename, out[4, j], out[0, j], out[1, j], out[2, j], out[3, j]])
             print("\r[{}]/[{}]".format(i, len(image_list)), end="")  # \r表示回到行的开头位置
             # cv.imshow("test", img)
             # cv.waitKey()
-        # print("")
         # calculate AP
         ap_list = calculate_map(prediction, target)
         for idx, ap in enumerate(ap_list):

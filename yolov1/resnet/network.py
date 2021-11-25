@@ -73,8 +73,8 @@ class ResNet50Det(nn.Module):
     def forward(self, data):
         x = self.backbone(data)
         # x = self.detect_head(x)
-        # x = self.avgpool(x) # 1.59
-        x = self.conv(x) #20211031
+        # x = self.avgpool(x)
+        x = self.conv(x)  #296, 0.51
         x = self.detect_block1(x)
         x = self.detect_block2(x)
         x = self.detect_block3(x)
