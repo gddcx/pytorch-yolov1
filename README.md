@@ -2,7 +2,8 @@
 Implemented YOLOv1 based on pytorch.  
 There are two version with different backbone.   
 Folder "resnet" means using the resnet50 as the backbone and folder "darknet" means using the backbone presented in the paper.
-All checkpoint files can be downloaded on https://drive.google.com/drive/folders/1Aru9-JREqFBYoK3R52BB-K-tFrM25Woi?usp=sharing
+All checkpoint files can be downloaded on https://drive.google.com/drive/folders/1Aru9-JREqFBYoK3R52BB-K-tFrM25Woi?usp=sharing  
+All models are trained on VOC 2007 + VOC 2012 trainval set.
 
 ## darknet
 To compare the performance with paper, I have implemented the model presented in paper.  
