@@ -84,8 +84,7 @@ def main():
     eval_loader = DataLoader(eval_dataset, batch_size=BATCH_SIZE, num_workers=1, shuffle=False, drop_last=False)
     #-----模型加载-----#
     net = YOLOBackbone()
-    # temp_state_dict = torch.load("45_920828.pth", map_location="cpu")
-    temp_state_dict = torch.load("50_1020918.pth", map_location="cpu")
+    temp_state_dict = torch.load("pretrain.pth", map_location="cpu")
     state_dict = {k.replace("module.", ""): v for k, v in temp_state_dict.items()}
     net.load_state_dict(state_dict)
     net = net.cuda()
