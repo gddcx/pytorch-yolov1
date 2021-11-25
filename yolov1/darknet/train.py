@@ -108,9 +108,6 @@ def main(_run):
     state_dict = torch.load("pretrain.pth")
     state_dict = {k: v for k, v in state_dict.items() if "fc" not in k}
     net.load_state_dict(state_dict, strict=False)
-    for name, param in net.module.layer1.named_parameters():
-        print(name, param)
-    exit()
     net = net.cuda()
     #-----优化-----#
     criterion = YOLOLoss(lambda_coord=5, lambda_noobj=0.5, grid=7)
