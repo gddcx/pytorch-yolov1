@@ -165,11 +165,8 @@ def load_data(DATA_PATH):
 
 
 if __name__ == "__main__":
-    # DATA_PATH="../../dataset/VOC2007/test/"
     DATA_PATH="D:\\dataset\\VOC2007\\test"
-    # DATA_PATH="D:\\dataset\\VOC2012\\test"
-    # MODEL_PATH = "models/YOLO_ResNet50Det/294/90_25116.pth"
-    MODEL_PATH = "models/YOLO_ResNet50Det/296/113_31464.pth"
+    MODEL_PATH = "resnetdet.pth"
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
