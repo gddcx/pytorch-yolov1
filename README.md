@@ -16,3 +16,8 @@ python pretrain.py 20211125  # the string 20211125 is the index of this train.
 python eval.py # evaluate the model
 ```
 ### detection
+The detection model obtain **43.8 mAP** on VOC2007 val set. 
+```bash
+python train.py # train the detection model with sacred
+python eval.py # evaluate the model
+```
