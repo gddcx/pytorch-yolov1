@@ -4,7 +4,7 @@
 #  |-train
 #  |-val
 
-cd ../../dataset/ILSVRC2012
+cd ../../../dataset/ILSVRC2012
 mkdir train
 tar -xvf ILSVRC2012.img_train.tar -C train
 mkdir val
